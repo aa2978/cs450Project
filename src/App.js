@@ -21,6 +21,7 @@ class App extends Component {
     this.svgRef = React.createRef();
     this.tooltipRef = React.createRef();
     this.heatmapRef = React.createRef();
+    this.barChartRef = React.createRef();
   }
 
   componentDidMount() {
@@ -67,6 +68,7 @@ class App extends Component {
         this.updateChart();
         this.updateXAxis();
         this.drawHeatmap();
+        this.drawBarChart();
       });
     });
   }
@@ -232,6 +234,183 @@ class App extends Component {
       .call(d3.axisLeft(y));
   };
 
+  drawBarChart() {
+    const svg = d3.select(this.barChartRef.current).attr('width', 500).attr('height', 500);
+    const width = 600;
+    const height = 800;
+    const barWidth = 50;
+    const gapBetweenBars = 100;
+
+    // Clear previous elements
+    svg.selectAll('rect').remove();
+    svg.selectAll('.tooltip').remove();
+    svg.selectAll('.axis-group').remove();
+
+    // Create tooltip
+    const tooltip = d3.select(".charts")
+      .append("div")
+      .attr("class", "tooltip")
+      .style("opacity", 0)
+      .style("position", "absolute")
+      .style("background", "white")
+      .style("border", "1px solid #ccc")
+      .style("padding", "5px 10px")
+      .style("border-radius", "4px")
+      .style("pointer-events", "none");
+
+    function showTooltip(event, d) {
+      tooltip.transition().duration(200).style("opacity", 1);
+      tooltip.html(`${d.group}<br/>${d.label}: ${d.count}`)
+        .style("left", (event.pageX + 10) + "px")
+        .style("top", (event.pageY - 20) + "px");
+    }
+
+    function hideTooltip() {
+      tooltip.transition().duration(200).style("opacity", 0);
+    }
+
+    // Counts
+    const nonSmokerCounts = {
+      cardio_1: this.state.data.filter(d => +d.cardio === 1 && +d.smoke === 0).length,
+      cardio_0: this.state.data.filter(d => +d.cardio === 0 && +d.smoke === 0).length
+    };
+    const smokerCounts = {
+      cardio_1: this.state.data.filter(d => +d.cardio === 1 && +d.smoke === 1).length,
+      cardio_0: this.state.data.filter(d => +d.cardio === 0 && +d.smoke === 1).length
+    };
+
+    const nonSmokerTotal = nonSmokerCounts.cardio_1 + nonSmokerCounts.cardio_0;
+    const smokerTotal = smokerCounts.cardio_1 + smokerCounts.cardio_0;
+
+    const yNonSmoker = d3.scaleLinear()
+      .domain([0, nonSmokerTotal])
+      .range([height - 50, 50]);
+
+    // Add Y-axis label for Non-Smokers
+    svg.append("text")
+      .attr("transform", "rotate(-90)")  // Rotate the text so it's vertical
+      .attr("x", -(height / 2))          // Center vertically
+      .attr("y", 20)                     // Slightly offset to the right
+      .attr("dy", "1em")
+      .style("font-size", "14px")
+      .style("fill", "#333")
+      .style("font-weight", "bold")
+      .text("# of individuals");
+
+
+    const ySmoker = d3.scaleLinear()
+      .domain([0, smokerTotal])
+      .range([height - 50, 50]);
+
+    const barPositions = [
+      50 + barWidth, // non-smokers
+      50 + barWidth + gapBetweenBars // smokers
+    ];
+
+    // Draw non-smoker bar
+    svg.append('rect')
+      .datum({ group: "Non-smokers", label: "Cardio (1)", count: nonSmokerCounts.cardio_1 })
+      .attr('x', barPositions[0])
+      .attr('y', yNonSmoker(nonSmokerCounts.cardio_1))
+      .attr('width', barWidth)
+      .attr('height', yNonSmoker(0) - yNonSmoker(nonSmokerCounts.cardio_1))
+      .attr('fill', '#1f77b4')
+      .on("mouseover", showTooltip)
+      .on("mousemove", showTooltip)
+      .on("mouseout", hideTooltip);
+
+    svg.append('rect')
+      .datum({ group: "Non-smokers", label: "Cardio (0)", count: nonSmokerCounts.cardio_0 })
+      .attr('x', barPositions[0])
+      .attr('y', yNonSmoker(nonSmokerTotal))
+      .attr('width', barWidth)
+      .attr('height', yNonSmoker(0) - yNonSmoker(nonSmokerCounts.cardio_0))
+      .attr('fill', '#ff7f0e')
+      .on("mouseover", showTooltip)
+      .on("mousemove", showTooltip)
+      .on("mouseout", hideTooltip);
+
+    // Draw smoker bar
+    svg.append('rect')
+      .datum({ group: "Smokers", label: "Cardio (1)", count: smokerCounts.cardio_1 })
+      .attr('x', barPositions[1])
+      .attr('y', ySmoker(smokerCounts.cardio_1))
+      .attr('width', barWidth)
+      .attr('height', ySmoker(0) - ySmoker(smokerCounts.cardio_1))
+      .attr('fill', '#1f77b4')
+      .on("mouseover", showTooltip)
+      .on("mousemove", showTooltip)
+      .on("mouseout", hideTooltip);
+
+    svg.append('rect')
+      .datum({ group: "Smokers", label: "Cardio (0)", count: smokerCounts.cardio_0 })
+      .attr('x', barPositions[1])
+      .attr('y', ySmoker(smokerTotal))
+      .attr('width', barWidth)
+      .attr('height', ySmoker(0) - ySmoker(smokerCounts.cardio_0))
+      .attr('fill', '#ff7f0e')
+      .on("mouseover", showTooltip)
+      .on("mousemove", showTooltip)
+      .on("mouseout", hideTooltip);
+
+    // Draw separate y-axes
+    svg.append("g")
+      .attr("class", "axis-group")
+      .attr("transform", `translate(${barPositions[0] - 10}, 0)`)
+      .call(d3.axisLeft(yNonSmoker).ticks(5));
+
+    svg.append("g")
+      .attr("class", "axis-group")
+      .attr("transform", `translate(${barPositions[1] + barWidth + 10}, 0)`)
+      .call(d3.axisRight(ySmoker).ticks(5));
+
+    // Add group labels under the bars
+    svg.append("text")
+      .attr("x", barPositions[0] + barWidth / 2)
+      .attr("y", height - 30)
+      .attr("text-anchor", "middle")
+      .text("Non-Smokers")
+      .style("font-size", "10px")
+      .style("fill", "#333");
+
+    svg.append("text")
+      .attr("x", barPositions[1] + barWidth / 2)
+      .attr("y", height - 30)
+      .attr("text-anchor", "middle")
+      .text("Smokers")
+      .style("font-size", "10px")
+      .style("fill", "#333");
+
+    // Add legend
+    const legend = svg.append("g")
+      .attr("class", "legend")
+      .attr("transform", `translate(${width - 250}, 50)`); // position it top-right
+
+    const legendItems = [
+      { label: "Cardio = 1", color: "#1f77b4" },  // same color as your bar
+      { label: "Cardio = 0", color: "#ff7f0e" }
+    ];
+
+    legendItems.forEach((item, i) => {
+      const legendRow = legend.append("g")
+        .attr("transform", `translate(0, ${i * 25})`);
+
+      legendRow.append("rect")
+        .attr("width", 20)
+        .attr("height", 20)
+        .attr("fill", item.color);
+
+      legendRow.append("text")
+        .attr("x", 30)
+        .attr("y", 15)
+        .text(item.label)
+        .attr("text-anchor", "start")
+        .style("alignment-baseline", "middle")
+        .style("font-size", "14px")
+        .style("fill", "#333");
+    });
+  }
+
   render() {
     const { minAge, maxAge, sliderValue, pendingNumPoints, heatmapFilter } = this.state;
 
@@ -264,17 +443,17 @@ class App extends Component {
         }}></div>
 
         <h2>Correlation Heatmap</h2>
-        <div>
-          {['all', 'cardio_0', 'cardio_1'].map(f => (
-            <label key={f}>
-              <input type="radio" name="filter" value={f}
-                checked={heatmapFilter === f}
-                onChange={e => this.setState({ heatmapFilter: e.target.value })} />
-              {f.replace('_', ' ').toUpperCase()}
-            </label>
-          ))}
-        </div>
+        <select value={heatmapFilter} onChange={e => this.setState({ heatmapFilter: e.target.value })}>
+          <option value="all">All</option>
+          <option value="cardio_1">Cardio = 1</option>
+          <option value="cardio_0">Cardio = 0</option>
+        </select>
         <svg ref={this.heatmapRef}></svg>
+
+        <h2>Smokers vs Cardio Bar Chart</h2>
+        <div className="charts">
+          <svg ref={this.barChartRef}></svg>
+        </div>
       </div>
     );
   }
